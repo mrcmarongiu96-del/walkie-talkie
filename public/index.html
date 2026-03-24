@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Walkie-Talkie</title>
+  <link rel="stylesheet" href="style.css">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1a1a2e">
+</head>
+<body>
+  <!-- Login screen -->
+  <div id="login-screen" class="screen active">
+    <div class="login-container">
+      <div class="logo">
+        <div class="antenna"></div>
+        <div class="radio-icon">WT</div>
+      </div>
+      <h1>Walkie-Talkie</h1>
+      <div class="input-group">
+        <label for="username">Il tuo nome</label>
+        <input type="text" id="username" placeholder="Es: Marco" maxlength="20" autocomplete="off">
+      </div>
+      <div class="input-group">
+        <label for="channel">Canale</label>
+        <input type="text" id="channel" placeholder="Es: squadra-1" maxlength="30" autocomplete="off">
+      </div>
+      <button id="join-btn" class="btn-join">Entra</button>
+    </div>
+  </div>
+
+  <!-- Main walkie-talkie screen -->
+  <div id="main-screen" class="screen">
+    <div class="top-bar">
+      <div class="channel-info">
+        <span class="channel-label">CH</span>
+        <span id="channel-name" class="channel-name">---</span>
+      </div>
+      <div class="connection-status">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text">Connesso</span>
+      </div>
+      <button id="leave-btn" class="btn-leave">Esci</button>
+    </div>
+
+    <div class="users-panel">
+      <div class="users-header">Utenti nel canale</div>
+      <div id="users-list" class="users-list"></div>
+    </div>
+
+    <div class="talker-display">
+      <div id="talker-indicator" class="talker-indicator hidden">
+        <div class="sound-waves">
+          <span></span><span></span><span></span>
+        </div>
+        <span id="talker-name">---</span>
+      </div>
+      <div id="idle-indicator" class="idle-indicator">
+        <span>Canale libero</span>
+      </div>
+    </div>
+
+    <div class="ptt-container">
+      <button id="ptt-btn" class="ptt-btn" disabled>
+        <div class="ptt-inner">
+          <div class="ptt-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </div>
+          <span class="ptt-label">TIENI PREMUTO<br>PER PARLARE</span>
+        </div>
+      </button>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
