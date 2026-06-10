@@ -6,14 +6,13 @@ const path = require('path');
 const { Server } = require('socket.io');
 
 const app = express();
+app.use(express.static('public'));
 
-// Use HTTPS if certs exist, otherwise HTTP
+// HTTP always; HTTPS if certs exist (needed for mic on smartphones)
+const httpServer = http.createServer(app);
+let httpsServer = null;
 const certPath = path.join(__dirname, 'cert.pem');
 const keyPath = path.join(__dirname, 'key.pem');
-// Run both HTTP (port 3000) and HTTPS (port 3443) so smartphone can use mic
-const httpServer = http.createServer(app);
-
-let httpsServer = null;
 if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
   httpsServer = https.createServer({
     key: fs.readFileSync(keyPath),
@@ -21,98 +20,144 @@ if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
   }, app);
 }
 
-const ioOptions = { maxHttpBufferSize: 5e6 }; // 5MB for audio messages
-
-// Share the same Socket.IO instance across both servers
-const io = new Server(ioOptions);
+const io = new Server({ maxHttpBufferSize: 1e6 });
 io.attach(httpServer);
 if (httpsServer) io.attach(httpsServer);
 
-app.use(express.static('public'));
+const MAX_CHAT_HISTORY = 50;
 
-// Track who is currently talking per channel
-const channelLocks = new Map();
+// name -> { password, lock (socketId|null), chat: [{name,text,ts}] }
+const channels = new Map();
+
+function getChannel(name) {
+  return channels.get(name);
+}
+
+function channelSummary() {
+  const list = [];
+  for (const [name, ch] of channels) {
+    const room = io.sockets.adapter.rooms.get(name);
+    const count = room ? room.size : 0;
+    if (count > 0) list.push({ name, users: count, locked: !!ch.password });
+  }
+  return list.sort((a, b) => b.users - a.users);
+}
+
+function broadcastChannels() {
+  io.emit('channels', channelSummary());
+}
+
+function usersInChannel(name, exceptId) {
+  const room = io.sockets.adapter.rooms.get(name);
+  const list = [];
+  if (room) {
+    for (const sid of room) {
+      const s = io.sockets.sockets.get(sid);
+      if (s && s.id !== exceptId) list.push({ name: s.data.userName, id: s.id });
+    }
+  }
+  return list;
+}
 
 io.on('connection', (socket) => {
   let currentChannel = null;
-  let userName = null;
 
-  socket.on('join', ({ channel, name }) => {
-    // Leave previous channel
-    if (currentChannel) {
-      socket.leave(currentChannel);
-      io.to(currentChannel).emit('user-left', { name: userName, id: socket.id });
-      if (channelLocks.get(currentChannel) === socket.id) {
-        channelLocks.delete(currentChannel);
-      }
+  socket.emit('channels', channelSummary());
+
+  function leaveCurrent() {
+    if (!currentChannel) return;
+    const ch = getChannel(currentChannel);
+    socket.leave(currentChannel);
+    if (ch && ch.lock === socket.id) {
+      ch.lock = null;
+      socket.to(currentChannel).emit('ptt-end', { name: socket.data.userName, id: socket.id });
+    }
+    socket.to(currentChannel).emit('user-left', { name: socket.data.userName, id: socket.id });
+    // Drop empty channels (frees the password too)
+    const room = io.sockets.adapter.rooms.get(currentChannel);
+    if (!room || room.size === 0) channels.delete(currentChannel);
+    console.log(`${socket.data.userName} left "${currentChannel}"`);
+    currentChannel = null;
+    broadcastChannels();
+  }
+
+  socket.on('join', ({ channel, name, password }, ack) => {
+    channel = String(channel || '').trim().toLowerCase().slice(0, 30);
+    name = String(name || '').trim().slice(0, 20);
+    password = String(password || '');
+    if (!channel || !name) return ack && ack({ ok: false, error: 'Nome e canale obbligatori' });
+
+    let ch = getChannel(channel);
+    if (ch && ch.password && ch.password !== password) {
+      return ack && ack({ ok: false, error: 'Password errata' });
+    }
+    if (!ch) {
+      ch = { password: password || null, lock: null, chat: [] };
+      channels.set(channel, ch);
     }
 
+    leaveCurrent();
     currentChannel = channel;
-    userName = name;
+    socket.data.userName = name;
     socket.join(channel);
 
-    // Get list of users in this channel
-    const room = io.sockets.adapter.rooms.get(channel);
-    const userList = [];
-    if (room) {
-      for (const sid of room) {
-        const s = io.sockets.sockets.get(sid);
-        if (s && s.id !== socket.id) {
-          userList.push({ name: s.data.userName, id: s.id });
-        }
-      }
-    }
-    socket.data.userName = name;
-
-    socket.emit('channel-users', userList);
     socket.to(channel).emit('user-joined', { name, id: socket.id });
+    broadcastChannels();
+    console.log(`${name} joined "${channel}"`);
 
-    console.log(`${name} joined channel "${channel}" (${room ? room.size : 1} users)`);
+    ack && ack({
+      ok: true,
+      users: usersInChannel(channel, socket.id),
+      chat: ch.chat,
+      talker: ch.lock ? { id: ch.lock, name: getUserName(ch.lock) } : null
+    });
   });
+
+  socket.on('leave', () => leaveCurrent());
 
   socket.on('ptt-start', () => {
-    if (!currentChannel) return;
-
-    const currentTalker = channelLocks.get(currentChannel);
-    if (currentTalker && currentTalker !== socket.id) {
-      socket.emit('channel-busy', { name: getUserName(currentTalker) });
-      return;
+    const ch = getChannel(currentChannel);
+    if (!ch) return;
+    if (ch.lock && ch.lock !== socket.id) {
+      return socket.emit('channel-busy', { name: getUserName(ch.lock) });
     }
-
-    channelLocks.set(currentChannel, socket.id);
+    ch.lock = socket.id;
     socket.emit('ptt-granted');
-    socket.to(currentChannel).emit('ptt-start', { name: userName, id: socket.id });
+    socket.to(currentChannel).emit('ptt-start', { name: socket.data.userName, id: socket.id });
   });
 
-  socket.on('audio-message', (data) => {
-    if (!currentChannel) return;
-    const size = data.audio ? data.audio.byteLength || data.audio.length : 0;
-    console.log(`Audio from ${userName}: ${size} bytes, mime: ${data.mime}`);
-    socket.to(currentChannel).emit('audio-message', data);
+  // Live audio: small PCM chunks relayed in real time while talking
+  socket.on('audio-chunk', (data) => {
+    const ch = getChannel(currentChannel);
+    if (!ch || ch.lock !== socket.id) return;
+    socket.to(currentChannel).volatile.emit('audio-chunk', {
+      pcm: data.pcm, rate: data.rate, id: socket.id
+    });
   });
 
   socket.on('ptt-end', () => {
-    if (!currentChannel) return;
-    if (channelLocks.get(currentChannel) !== socket.id) return;
-
-    channelLocks.delete(currentChannel);
-    socket.to(currentChannel).emit('ptt-end', { name: userName, id: socket.id });
+    const ch = getChannel(currentChannel);
+    if (!ch || ch.lock !== socket.id) return;
+    ch.lock = null;
+    socket.to(currentChannel).emit('ptt-end', { name: socket.data.userName, id: socket.id });
   });
 
-  socket.on('disconnect', () => {
-    if (currentChannel) {
-      if (channelLocks.get(currentChannel) === socket.id) {
-        channelLocks.delete(currentChannel);
-        io.to(currentChannel).emit('ptt-end', { name: userName, id: socket.id });
-      }
-      io.to(currentChannel).emit('user-left', { name: userName, id: socket.id });
-      console.log(`${userName} left channel "${currentChannel}"`);
-    }
+  socket.on('chat-message', (text) => {
+    const ch = getChannel(currentChannel);
+    if (!ch) return;
+    text = String(text || '').trim().slice(0, 500);
+    if (!text) return;
+    const msg = { name: socket.data.userName, text, ts: Date.now() };
+    ch.chat.push(msg);
+    if (ch.chat.length > MAX_CHAT_HISTORY) ch.chat.shift();
+    io.to(currentChannel).emit('chat-message', msg);
   });
+
+  socket.on('disconnect', () => leaveCurrent());
 
   function getUserName(socketId) {
     const s = io.sockets.sockets.get(socketId);
-    return s ? s.data.userName : 'Unknown';
+    return s ? s.data.userName : 'Sconosciuto';
   }
 });
 
