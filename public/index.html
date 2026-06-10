@@ -2,22 +2,29 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Walkie-Talkie</title>
   <link rel="stylesheet" href="style.css">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#1a1a2e">
+  <meta name="theme-color" content="#0f1020">
 </head>
 <body>
-  <!-- Login screen -->
+  <div class="bg-blobs"><span></span><span></span><span></span></div>
+
+  <!-- ===== LOGIN ===== -->
   <div id="login-screen" class="screen active">
-    <div class="login-container">
+    <div class="glass login-card">
       <div class="logo">
-        <div class="antenna"></div>
-        <div class="radio-icon">WT</div>
+        <div class="logo-ring"></div>
+        <svg viewBox="0 0 24 24" width="42" height="42" fill="currentColor">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
       </div>
-      <h1>Walkie-Talkie</h1>
+      <h1>Walkie&#8209;Talkie</h1>
+      <p class="subtitle">Parla in tempo reale con la tua squadra</p>
+
       <div class="input-group">
         <label for="username">Il tuo nome</label>
         <input type="text" id="username" placeholder="Es: Marco" maxlength="20" autocomplete="off">
@@ -26,54 +33,84 @@
         <label for="channel">Canale</label>
         <input type="text" id="channel" placeholder="Es: squadra-1" maxlength="30" autocomplete="off">
       </div>
-      <button id="join-btn" class="btn-join">Entra</button>
+      <div class="input-group">
+        <label for="password">Password <span class="optional">(opzionale)</span></label>
+        <input type="password" id="password" placeholder="Solo per canali protetti" maxlength="50" autocomplete="off">
+      </div>
+      <button id="join-btn" class="btn-primary">Entra nel canale</button>
+      <p id="login-error" class="login-error hidden"></p>
+
+      <div class="channels-box">
+        <div class="channels-title">Canali attivi</div>
+        <div id="channels-list" class="channels-list">
+          <span class="channels-empty">Nessun canale attivo</span>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Main walkie-talkie screen -->
+  <!-- ===== MAIN ===== -->
   <div id="main-screen" class="screen">
-    <div class="top-bar">
+    <header class="glass top-bar">
       <div class="channel-info">
         <span class="channel-label">CH</span>
         <span id="channel-name" class="channel-name">---</span>
       </div>
-      <div class="connection-status">
-        <span id="status-dot" class="status-dot"></span>
-        <span id="status-text">Connesso</span>
+      <div class="top-actions">
+        <span class="conn"><span id="status-dot" class="status-dot"></span><span id="status-text">Connesso</span></span>
+        <button id="sound-btn" class="btn-icon" title="Suoni on/off">&#128266;</button>
+        <button id="leave-btn" class="btn-leave">Esci</button>
       </div>
-      <button id="leave-btn" class="btn-leave">Esci</button>
-    </div>
+    </header>
 
-    <div class="users-panel">
-      <div class="users-header">Utenti nel canale</div>
-      <div id="users-list" class="users-list"></div>
-    </div>
-
-    <div class="talker-display">
+    <section class="glass talker-display">
       <div id="talker-indicator" class="talker-indicator hidden">
-        <div class="sound-waves">
-          <span></span><span></span><span></span>
-        </div>
-        <span id="talker-name">---</span>
+        <div class="sound-waves"><span></span><span></span><span></span><span></span><span></span></div>
+        <span id="talker-name" class="talker-name">---</span>
       </div>
-      <div id="idle-indicator" class="idle-indicator">
-        <span>Canale libero</span>
-      </div>
-    </div>
+      <div id="idle-indicator" class="idle-indicator">Canale libero</div>
+      <div class="vu-meter"><div id="vu-bar" class="vu-bar"></div></div>
+    </section>
 
-    <div class="ptt-container">
+    <section class="ptt-container">
       <button id="ptt-btn" class="ptt-btn" disabled>
-        <div class="ptt-inner">
-          <div class="ptt-icon">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-          </div>
+        <span class="ptt-glow"></span>
+        <span class="ptt-inner">
+          <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
           <span class="ptt-label">TIENI PREMUTO<br>PER PARLARE</span>
-        </div>
+        </span>
       </button>
-    </div>
+      <p class="ptt-hint">Da PC puoi tenere premuta la <kbd>barra spaziatrice</kbd></p>
+    </section>
+
+    <section class="glass panel">
+      <nav class="tabs">
+        <button class="tab active" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="users">Utenti <span id="users-count" class="count">0</span></button>
+        <button class="tab" data-tab="history">Storico</button>
+      </nav>
+
+      <div id="tab-chat" class="tab-content active">
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Scrivi un messaggio..." maxlength="500" autocomplete="off">
+          <button id="chat-send" class="btn-send" title="Invia">&#10148;</button>
+        </div>
+      </div>
+
+      <div id="tab-users" class="tab-content">
+        <div id="users-list" class="users-list"></div>
+      </div>
+
+      <div id="tab-history" class="tab-content">
+        <div id="history-list" class="history-list">
+          <span class="channels-empty">Nessuna trasmissione registrata</span>
+        </div>
+      </div>
+    </section>
 
     <div id="toast" class="toast hidden"></div>
   </div>
