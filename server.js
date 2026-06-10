@@ -164,14 +164,28 @@ io.on('connection', (socket) => {
 const HTTP_PORT = process.env.PORT || 3000;
 const HTTPS_PORT = 3443;
 
+function lanIPs() {
+  const os = require('os');
+  const ips = [];
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const i of ifaces) {
+      if (i.family === 'IPv4' && !i.internal) ips.push(i.address);
+    }
+  }
+  return ips;
+}
+
 httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
-  console.log(`HTTP server on port ${HTTP_PORT} (PC/localhost)`);
-  console.log(`Open http://localhost:${HTTP_PORT}`);
+  console.log(`\n  PC:         http://localhost:${HTTP_PORT}`);
 });
 
 if (httpsServer) {
   httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
-    console.log(`HTTPS server on port ${HTTPS_PORT} (smartphone)`);
-    console.log(`Open https://192.168.x.x:${HTTPS_PORT} from your phone`);
+    for (const ip of lanIPs()) {
+      console.log(`  Smartphone: https://${ip}:${HTTPS_PORT}  (stessa Wi-Fi)`);
+    }
+    console.log('');
   });
+} else {
+  console.log('  (HTTPS non attivo: mancano cert.pem/key.pem — il microfono da smartphone non funzionerà)');
 }
